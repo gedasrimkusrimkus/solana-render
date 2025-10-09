@@ -945,4 +945,4 @@ def main():
         atomic_write_seen(seen)
         print("✅ Clean shutdown completed")
     except Exception as e:
-        print(f"💥
+        print(f"💥Fatal error: {e}")
