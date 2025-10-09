@@ -96,10 +96,14 @@ session = requests.Session()
 
 def validate_config():
     """Validuoti konfigūraciją"""
-    assert len(RPC_ENDPOINTS) > 0, "Need at least one RPC endpoint"
-    assert len(VALID_WALLETS) > 0, "Need at least one wallet to watch"
-    assert POLL_INTERVAL >= 5, "Poll interval too short"
-    assert THROTTLE >= 0.1, "Throttle too aggressive"
+    if len(RPC_ENDPOINTS) == 0:
+        raise Exception("Need at least one RPC endpoint")
+    if len(VALID_WALLETS) == 0:
+        raise Exception("Need at least one wallet to watch")
+    if POLL_INTERVAL < 5:
+        raise Exception("Poll interval too short")
+    if THROTTLE < 0.1:
+        raise Exception("Throttle too aggressive")
 
 def safe_rpc_call(method, params, timeout=10, max_retries=3):
     """Saugus RPC call su retry mechanizmu"""
@@ -398,11 +402,11 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                         font-size: 0.9em;
                     }
                     .wallet-management {
-                        background: #f8f9fa;
+                        background: #e3f2fd;
                         padding: 20px;
                         margin: 20px;
                         border-radius: 10px;
-                        border: 2px dashed #bdc3c7;
+                        border: 2px solid #2196f3;
                     }
                     .wallet-form {
                         display: flex;
@@ -630,7 +634,7 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                 </div>
                 """
                 
-                # Wallet Management Section
+                # Wallet Management Section - PRIDĖTA!
                 html += """
                 <div class="wallet-management">
                     <h3>🔧 Wallet Management</h3>
@@ -645,7 +649,7 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                     </form>
                     
                     <div class="current-wallets">
-                        <h4>Currently Watching ({len(VALID_WALLETS)} wallets):</h4>
+                        <h4>Currently Watching ({""" + str(len(VALID_WALLETS)) + """} wallets):</h4>
                         <div class="wallet-list">
                 """
                 
@@ -884,22 +888,30 @@ def main():
     if RENDER:
         print("🌍 Render.com environment detected")
     
-    if not VALID_WALLETS:
-        print("❌ No valid wallets!")
-        return
+    # Perkrauti wallet'us
+    global VALID_WALLETS
+    VALID_WALLETS = get_valid_wallets()
     
-    # Start web server in background thread
+    if not VALID_WALLETS:
+        print("❌ No valid wallets! Adding default ones...")
+        VALID_WALLETS = ["4Vgu5AHT1ndczhdgqAipNDqLsCPjBS5jMXkEg8yzhT9c"]
+        save_wallets(VALID_WALLETS)
+    
+    print(f"✅ Final wallet count: {len(VALID_WALLETS)}")
+    
+    # Start web server in background thread - DABAR ANKSČIAU!
     server_thread = threading.Thread(target=start_simple_server, daemon=True)
     server_thread.start()
     
     print(f"✅ Web dashboard available on port {PORT}")
     
+    # Tik DABAR kiti dalykai
     try:
         validate_config()
         print("✅ Configuration validated successfully")
     except Exception as e:
         print(f"❌ Configuration error: {e}")
-        return
+        print("🔄 Continuing anyway...")
     
     init_csv()
     seen = load_seen()
@@ -910,6 +922,7 @@ def main():
     print(f"👀 Watching {len(VALID_WALLETS)} wallets")
     print(f"⏰ Poll interval: {POLL_INTERVAL}s")
     print("⏹️  Press Ctrl+C to stop\n")
+    print("🌐 Web dashboard should be running now!")
 
     error_count = 0
     max_errors = 10
@@ -917,7 +930,6 @@ def main():
     try:
         while True:
             try:
-                # Atnaujinti seen data su naujais wallet'ais
                 current_wallets = get_valid_wallets()
                 for w in current_wallets:
                     seen.setdefault(w, set())
@@ -933,7 +945,7 @@ def main():
                 error_count += 1
                 print(f"⚠️ Main loop error #{error_count}: {e}")
                 if error_count >= max_errors:
-                    print("❌ Too many errors, exiting...")
+                    print("❌ Too many errors, but keeping web server alive...")
                     break
                 time.sleep(5)
             
@@ -944,4 +956,9 @@ def main():
         atomic_write_seen(seen)
         print("✅ Clean shutdown completed")
     except Exception as e:
-        print(f"💥Fatal error: {e}")
+        print(f"💥 Fatal error: {e}")
+        atomic_write_seen(seen)
+        print("✅ Emergency shutdown completed")
+
+if __name__ == "__main__":
+    main()
