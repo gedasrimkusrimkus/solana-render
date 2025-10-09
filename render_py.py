@@ -29,7 +29,6 @@ DEFAULT_WALLETS = [
     "4Vgu5AHT1ndczhdgqAipNDqLsCPjBS5jMXkEg8yzhT9c",
     "8AHdpimBNQhhb6FwUy49txZ7ahWGQz2iECbbN843RfZY",
     "3AS449MJzuwX7jqxX7yYmc19EiELiRuxffKxYfFkcxfY",
-    "14KBXMEiDZj6JWoSfyHKM8n8hAuF6rjJdXQRbaD9nZe",
     "3uaYZQCCLsg8ZMbMtrEyHLNVR4XLmJUYXHfZGrkJj48a",
     "GrkYZgtiQGmZrSbSc7MPJfo6UL9zo2uP5sKPNB7nUyEa",
     "2j668MqJFYoxUwxeFv7zfT8jo9DaQ92Siu3hvc6U7t1F",
