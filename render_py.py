@@ -9,6 +9,8 @@ import http.server
 import socketserver
 import threading
 import urllib.parse
+import math
+from collections import Counter, defaultdict
 
 # ---------------- RENDER.COM KONFIGŪRACIJA ----------------
 PORT = int(os.environ.get('PORT', 8000))
@@ -90,6 +92,110 @@ def get_valid_wallets():
 
 # INICIJUOTI VALID_WALLETS kaip global kintamąjį
 VALID_WALLETS = get_valid_wallets()
+
+# ---------------- STATISTICS FUNCTIONS ----------------
+def get_wallet_activity_stats():
+    """Gauti wallet'ų aktyvumo statistiką"""
+    stats = {
+        'total_transactions': 0,
+        'wallet_activity': {},
+        'recent_transactions': 0,
+        'top_tokens': [],
+        'hourly_activity': defaultdict(int)
+    }
+    
+    try:
+        if not os.path.exists(CSV_FILE):
+            return stats
+            
+        with open(CSV_FILE, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+            
+        stats['total_transactions'] = len(rows)
+        
+        # Wallet activity counting
+        wallet_counts = Counter()
+        token_counts = Counter()
+        
+        for row in rows:
+            wallet = row.get('wallet', '')
+            token = row.get('mint', '')
+            timestamp = row.get('timestamp_local', '')
+            
+            if wallet:
+                wallet_counts[wallet] += 1
+                
+            if token:
+                token_counts[token] += 1
+                
+            # Count recent transactions (last 24 hours)
+            try:
+                tx_time = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
+                if (datetime.now() - tx_time).total_seconds() <= 24 * 3600:
+                    stats['recent_transactions'] += 1
+                    
+                # Hourly activity
+                hour_key = tx_time.strftime("%H:00")
+                stats['hourly_activity'][hour_key] += 1
+            except:
+                pass
+        
+        # Convert to sorted list
+        stats['wallet_activity'] = [
+            {'wallet': wallet, 'count': count, 'short': f"{wallet[:8]}...{wallet[-6:]}"}
+            for wallet, count in wallet_counts.most_common()
+        ]
+        
+        stats['top_tokens'] = [
+            {'token': token, 'count': count, 'short': f"{token[:8]}...{token[-6]}" if len(token) > 15 else token}
+            for token, count in token_counts.most_common(10)
+        ]
+        
+    except Exception as e:
+        print(f"❌ Error calculating stats: {e}")
+        
+    return stats
+
+def generate_activity_chart(wallet_activity, max_height=120):
+    """Sugeneruoti ASCII stulpelinę diagramą"""
+    if not wallet_activity:
+        return "No activity data available"
+    
+    chart_lines = []
+    max_count = max([wa['count'] for wa in wallet_activity]) if wallet_activity else 1
+    
+    for wa in wallet_activity[:8]:  # Top 8 wallets
+        wallet_short = wa['short']
+        count = wa['count']
+        
+        # Calculate bar length
+        bar_length = int((count / max_count) * 20) if max_count > 0 else 0
+        bar = '█' * bar_length
+        
+        chart_lines.append(f"{wallet_short:<16} {bar} {count}")
+    
+    return "\n".join(chart_lines)
+
+def generate_hourly_chart(hourly_activity):
+    """Sugeneruoti valandinės aktyvumo diagramą"""
+    if not hourly_activity:
+        return "No hourly data available"
+    
+    # Sort hours
+    sorted_hours = sorted(hourly_activity.keys())
+    max_count = max(hourly_activity.values()) if hourly_activity else 1
+    
+    chart_lines = ["🕒 Hourly Activity:"]
+    
+    for hour in sorted_hours[-12:]:  # Last 12 hours
+        count = hourly_activity[hour]
+        bar_length = int((count / max_count) * 15) if max_count > 0 else 0
+        bar = '█' * bar_length
+        
+        chart_lines.append(f"{hour:<6} {bar} {count}")
+    
+    return "\n".join(chart_lines)
 
 # ---------------- LIKĘS KODAS BE PAKEITIMŲ ----------------
 session = requests.Session()
@@ -291,7 +397,7 @@ def process_transaction_for_wallet(signature, wallet):
                 "mint": mint,
                 "amount": round(amount, 9),
                 "fee_sol": round(fee_sol, 9),
-                "block_time": tx_json.get("blockTime")
+                "block_time": tx_json.get("block_time")
             })
         return rows
     except Exception as e:
@@ -327,17 +433,28 @@ def process_wallet_transactions(wallet, seen):
         
         if new_sigs > 0:
             print(f"📥 Processed {new_sigs} new transactions for {wallet[:8]}...")
+            
+            # Rodyti statistiką po kiekvieno apdorojimo
+            stats = get_wallet_activity_stats()
+            if stats['wallet_activity']:
+                print("📊 Wallet Activity Ranking:")
+                print(generate_activity_chart(stats['wallet_activity']))
+                print()
+                
     except Exception as e:
         print(f"Wallet process error: {e}")
     return seen
 
-# ---------------- WEB DASHBOARD SU WALLET PRIDĖJIMU ----------------
+# ---------------- WEB DASHBOARD SU STATISTIKA ----------------
 class CSVHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path == '/':
             self.send_response(200)
             self.send_header('Content-type', 'text/html')
             self.end_headers()
+            
+            # Gauti statistiką
+            stats = get_wallet_activity_stats()
             
             html = """
             <!DOCTYPE html>
@@ -400,6 +517,85 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                     .stat-label {
                         color: #7f8c8d;
                         font-size: 0.9em;
+                    }
+                    .analytics-section {
+                        display: grid;
+                        grid-template-columns: 1fr 1fr;
+                        gap: 20px;
+                        padding: 20px;
+                        background: #f8f9fa;
+                    }
+                    @media (max-width: 768px) {
+                        .analytics-section {
+                            grid-template-columns: 1fr;
+                        }
+                    }
+                    .chart-container {
+                        background: white;
+                        padding: 20px;
+                        border-radius: 10px;
+                        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                    }
+                    .chart-title {
+                        color: #2c3e50;
+                        margin-bottom: 15px;
+                        font-size: 1.2em;
+                        font-weight: 600;
+                    }
+                    .wallet-bar {
+                        display: flex;
+                        align-items: center;
+                        margin-bottom: 10px;
+                        padding: 8px;
+                        background: #f8f9fa;
+                        border-radius: 5px;
+                    }
+                    .wallet-name {
+                        width: 120px;
+                        font-family: monospace;
+                        font-size: 0.85em;
+                    }
+                    .bar-container {
+                        flex: 1;
+                        background: #e9ecef;
+                        border-radius: 3px;
+                        overflow: hidden;
+                        margin: 0 10px;
+                    }
+                    .bar-fill {
+                        height: 20px;
+                        background: linear-gradient(90deg, #3498db, #2980b9);
+                        border-radius: 3px;
+                        transition: width 0.3s ease;
+                    }
+                    .bar-count {
+                        width: 40px;
+                        text-align: right;
+                        font-weight: bold;
+                        color: #2c3e50;
+                    }
+                    .hourly-chart {
+                        display: flex;
+                        align-items: end;
+                        height: 120px;
+                        gap: 5px;
+                        margin-top: 10px;
+                    }
+                    .hour-bar {
+                        flex: 1;
+                        background: linear-gradient(to top, #27ae60, #2ecc71);
+                        border-radius: 3px 3px 0 0;
+                        position: relative;
+                        min-height: 5px;
+                    }
+                    .hour-label {
+                        position: absolute;
+                        bottom: -20px;
+                        left: 0;
+                        right: 0;
+                        text-align: center;
+                        font-size: 0.7em;
+                        color: #7f8c8d;
                     }
                     .wallet-management {
                         background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
@@ -607,48 +803,6 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                         min-width: 90px;
                         text-align: right;
                     }
-                    @media (max-width: 768px) {
-                        .container {
-                            margin: 10px;
-                            border-radius: 10px;
-                        }
-                        .header {
-                            padding: 20px;
-                        }
-                        .header h1 {
-                            font-size: 2em;
-                        }
-                        .stats {
-                            grid-template-columns: repeat(2, 1fr);
-                            padding: 15px;
-                            gap: 15px;
-                        }
-                        .table-container {
-                            padding: 10px;
-                        }
-                        .wallet-management {
-                            padding: 20px;
-                            margin: 15px;
-                        }
-                        .wallet-form {
-                            flex-direction: column;
-                        }
-                        .wallet-input {
-                            min-width: 100%;
-                        }
-                        .wallet-list {
-                            grid-template-columns: 1fr;
-                        }
-                        .wallet-item {
-                            flex-direction: column;
-                            align-items: stretch;
-                            gap: 10px;
-                        }
-                        .wallet-address {
-                            padding-right: 0;
-                            text-align: center;
-                        }
-                    }
                 </style>
             </head>
             <body>
@@ -656,27 +810,15 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                     <div class="header">
                         <h1>💰 Wallet CA Tracker</h1>
                         <p>Real-time Solana wallet transaction monitoring</p>
-                        <p style="font-size: 0.8em; opacity: 0.8;">🚀 Hosted on Render.com</p>
                     </div>
             """
             
             try:
                 # Statistics
-                total_tx = 0
-                unique_wallets = len(VALID_WALLETS)
-                unique_tokens = 0
-                
-                if os.path.exists(CSV_FILE):
-                    with open(CSV_FILE, 'r', encoding='utf-8') as f:
-                        reader = csv.DictReader(f)
-                        rows = list(reader)
-                        total_tx = len(rows)
-                        unique_tokens = len(set(row['mint'] for row in rows if row.get('mint')))
-                
                 html += f"""
                 <div class="stats">
                     <div class="stat-card">
-                        <div class="stat-number">{total_tx}</div>
+                        <div class="stat-number">{stats['total_transactions']}</div>
                         <div class="stat-label">Total Transactions</div>
                     </div>
                     <div class="stat-card">
@@ -684,17 +826,69 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                         <div class="stat-label">Watched Wallets</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-number">{unique_wallets}</div>
+                        <div class="stat-number">{len(stats['wallet_activity'])}</div>
                         <div class="stat-label">Active Wallets</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-number">{unique_tokens}</div>
-                        <div class="stat-label">Unique Tokens</div>
+                        <div class="stat-number">{stats['recent_transactions']}</div>
+                        <div class="stat-label">Last 24h</div>
                     </div>
                 </div>
                 """
                 
-                # Wallet Management Section - PRIDĖTA!
+                # Analytics Section - NEW!
+                html += """
+                <div class="analytics-section">
+                    <div class="chart-container">
+                        <div class="chart-title">📊 Wallet Activity Ranking</div>
+                """
+                
+                if stats['wallet_activity']:
+                    max_activity = max([wa['count'] for wa in stats['wallet_activity']])
+                    for wa in stats['wallet_activity'][:6]:  # Top 6 wallets
+                        percentage = (wa['count'] / max_activity * 100) if max_activity > 0 else 0
+                        html += f"""
+                        <div class="wallet-bar">
+                            <div class="wallet-name" title="{wa['wallet']}">{wa['short']}</div>
+                            <div class="bar-container">
+                                <div class="bar-fill" style="width: {percentage}%"></div>
+                            </div>
+                            <div class="bar-count">{wa['count']}</div>
+                        </div>
+                        """
+                else:
+                    html += "<p style='color: #7f8c8d; text-align: center;'>No activity data yet</p>"
+                
+                html += """
+                    </div>
+                    
+                    <div class="chart-container">
+                        <div class="chart-title">🕒 Hourly Activity</div>
+                        <div class="hourly-chart">
+                """
+                
+                if stats['hourly_activity']:
+                    sorted_hours = sorted(stats['hourly_activity'].keys())[-12:]
+                    max_hourly = max(stats['hourly_activity'].values()) if stats['hourly_activity'] else 1
+                    
+                    for hour in sorted_hours:
+                        count = stats['hourly_activity'][hour]
+                        height = (count / max_hourly * 100) if max_hourly > 0 else 5
+                        html += f"""
+                            <div class="hour-bar" style="height: {height}%" title="{hour}: {count} transactions">
+                                <div class="hour-label">{hour.split(':')[0]}</div>
+                            </div>
+                        """
+                else:
+                    html += "<p style='color: #7f8c8d; text-align: center;'>No hourly data yet</p>"
+                
+                html += """
+                        </div>
+                    </div>
+                </div>
+                """
+                
+                # Wallet Management Section
                 html += """
                 <div class="wallet-management">
                     <h3>🔧 Wallet Management</h3>
@@ -943,7 +1137,7 @@ def start_simple_server():
 
 def main():
     """Pagrindinė programa"""
-    print("🚀 Starting Wallet CA Tracker with Web Dashboard...")
+    print("🚀 Starting Wallet CA Tracker with Analytics Dashboard...")
     
     if RENDER:
         print("🌍 Render.com environment detected")
@@ -959,13 +1153,13 @@ def main():
     
     print(f"✅ Final wallet count: {len(VALID_WALLETS)}")
     
-    # Start web server in background thread - DABAR ANKSČIAU!
+    # Start web server in background thread
     server_thread = threading.Thread(target=start_simple_server, daemon=True)
     server_thread.start()
     
     print(f"✅ Web dashboard available on port {PORT}")
     
-    # Tik DABAR kiti dalykai
+    # Initialize other components
     try:
         validate_config()
         print("✅ Configuration validated successfully")
@@ -982,7 +1176,7 @@ def main():
     print(f"👀 Watching {len(VALID_WALLETS)} wallets")
     print(f"⏰ Poll interval: {POLL_INTERVAL}s")
     print("⏹️  Press Ctrl+C to stop\n")
-    print("🌐 Web dashboard should be running now!")
+    print("📊 Analytics dashboard should be running now!")
 
     error_count = 0
     max_errors = 10
