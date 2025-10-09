@@ -89,7 +89,7 @@ def get_valid_wallets():
             print(f"❌ Removing invalid wallet: {wallet}")
     return valid_wallets
 
-# INICIJUOTI VALID_WALLETS
+# INICIJUOTI VALID_WALLETS kaip global kintamąjį
 VALID_WALLETS = get_valid_wallets()
 
 # ---------------- LIKĘS KODAS BE PAKEITIMŲ ----------------
@@ -151,6 +151,7 @@ def load_seen():
         try:
             with open(SEEN_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
+            # Pridėti naujus wallet'us į seen data
             for w in VALID_WALLETS:
                 data.setdefault(w, [])
             return {k: set(v) for k, v in data.items()}
@@ -192,6 +193,7 @@ def notify_user(title, message):
     """Pranešti vartotojui"""
     if HAS_PLYER:
         try:
+            from plyer import notification
             notification.notify(title=title, message=message, timeout=6)
         except Exception:
             print(f"NOTIFY: {title} - {message}")
@@ -458,7 +460,7 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                         border-radius: 6px;
                         border: 1px solid #ecf0f1;
                         display: flex;
-                        justify-content: between;
+                        justify-content: space-between;
                         align-items: center;
                     }
                     .wallet-address {
@@ -916,11 +918,12 @@ def main():
     try:
         while True:
             try:
-                # Perkrauti wallet'us kiekvieną ciklą (jei kas pasikeitė)
-                global VALID_WALLETS
-                VALID_WALLETS = get_valid_wallets()
+                # Atnaujinti seen data su naujais wallet'ais
+                current_wallets = get_valid_wallets()
+                for w in current_wallets:
+                    seen.setdefault(w, set())
                 
-                for w in VALID_WALLETS:
+                for w in current_wallets:
                     seen = process_wallet_transactions(w, seen)
                 
                 atomic_write_seen(seen)
@@ -942,6 +945,4 @@ def main():
         atomic_write_seen(seen)
         print("✅ Clean shutdown completed")
     except Exception as e:
-        print(f"💥 Fatal error: {e}")
-        atomic_write_seen(seen)
-        print
+        print(f"💥
