@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import http.server
 import socketserver
 import threading
+import urllib.parse
 
 # ---------------- RENDER.COM KONFIGŪRACIJA ----------------
 PORT = int(os.environ.get('PORT', 8000))
@@ -20,7 +21,11 @@ RPC_ENDPOINTS = [
     "https://solana-rpc.publicnode.com"
 ]
 
-WATCHED_WALLETS = [
+# Wallet'ų failas
+WALLETS_FILE = os.path.join(os.getcwd(), "watched_wallets.json")
+
+# Default wallet'ai
+DEFAULT_WALLETS = [
     "4Vgu5AHT1ndczhdgqAipNDqLsCPjBS5jMXkEg8yzhT9c",
     "8AHdpimBNQhhb6FwUy49txZ7ahWGQz2iECbbN843RfZY",
     "3AS449MJzuwX7jqxX7yYmc19EiELiRuxffKxYfFkcxfY",
@@ -39,26 +44,52 @@ SIG_LIMIT = 20
 THROTTLE = 0.12
 HAS_PLYER = False
 
-# ---------------- WALLET VALIDATION (PRIDĖTA ČIA) ----------------
+# ---------------- WALLET MANAGEMENT ----------------
+def load_wallets():
+    """Įkelti wallet'us iš failo arba naudoti default'us"""
+    try:
+        if os.path.exists(WALLETS_FILE):
+            with open(WALLETS_FILE, 'r') as f:
+                wallets = json.load(f)
+                print(f"✅ Loaded {len(wallets)} wallets from file")
+                return wallets
+    except Exception as e:
+        print(f"❌ Error loading wallets: {e}")
+    
+    print("✅ Using default wallets")
+    return DEFAULT_WALLETS.copy()
+
+def save_wallets(wallets):
+    """Išsaugoti wallet'us į failą"""
+    try:
+        with open(WALLETS_FILE, 'w') as f:
+            json.dump(wallets, f, indent=2)
+        print(f"✅ Saved {len(wallets)} wallets to file")
+    except Exception as e:
+        print(f"❌ Error saving wallets: {e}")
+
 def validate_wallet_address(wallet):
     """Validuoti wallet adresą"""
     if not wallet or not isinstance(wallet, str):
         return False
     if len(wallet) != 44:
         return False
-    return True
+    # Paprastas Solana address validavimas
+    valid_chars = set('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz')
+    return all(c in valid_chars for c in wallet)
 
 def get_valid_wallets():
     """Gauti tik validžius wallet'us"""
+    wallets = load_wallets()
     valid_wallets = []
-    for wallet in WATCHED_WALLETS:
+    for wallet in wallets:
         if validate_wallet_address(wallet):
             valid_wallets.append(wallet)
         else:
             print(f"❌ Removing invalid wallet: {wallet}")
     return valid_wallets
 
-# INICIJUOTI VALID_WALLETS čia, ne main() funkcijoje
+# INICIJUOTI VALID_WALLETS
 VALID_WALLETS = get_valid_wallets()
 
 # ---------------- LIKĘS KODAS BE PAKEITIMŲ ----------------
@@ -295,7 +326,7 @@ def process_wallet_transactions(wallet, seen):
         print(f"Wallet process error: {e}")
     return seen
 
-# ---------------- WEB DASHBOARD ----------------
+# ---------------- WEB DASHBOARD SU WALLET PRIDĖJIMU ----------------
 class CSVHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path == '/':
@@ -365,6 +396,88 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                         color: #7f8c8d;
                         font-size: 0.9em;
                     }
+                    .wallet-management {
+                        background: #f8f9fa;
+                        padding: 20px;
+                        margin: 20px;
+                        border-radius: 10px;
+                        border: 2px dashed #bdc3c7;
+                    }
+                    .wallet-form {
+                        display: flex;
+                        gap: 10px;
+                        align-items: end;
+                        margin-bottom: 15px;
+                    }
+                    .wallet-input {
+                        flex: 1;
+                    }
+                    .wallet-input label {
+                        display: block;
+                        margin-bottom: 5px;
+                        font-weight: bold;
+                        color: #2c3e50;
+                    }
+                    .wallet-input input {
+                        width: 100%;
+                        padding: 12px;
+                        border: 2px solid #bdc3c7;
+                        border-radius: 8px;
+                        font-size: 16px;
+                        transition: border-color 0.3s;
+                    }
+                    .wallet-input input:focus {
+                        border-color: #3498db;
+                        outline: none;
+                    }
+                    .add-btn {
+                        padding: 12px 24px;
+                        background: #27ae60;
+                        color: white;
+                        border: none;
+                        border-radius: 8px;
+                        cursor: pointer;
+                        font-size: 16px;
+                        transition: background 0.3s;
+                    }
+                    .add-btn:hover {
+                        background: #219a52;
+                    }
+                    .current-wallets {
+                        margin-top: 20px;
+                    }
+                    .wallet-list {
+                        display: grid;
+                        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+                        gap: 10px;
+                        margin-top: 10px;
+                    }
+                    .wallet-item {
+                        background: white;
+                        padding: 10px 15px;
+                        border-radius: 6px;
+                        border: 1px solid #ecf0f1;
+                        display: flex;
+                        justify-content: between;
+                        align-items: center;
+                    }
+                    .wallet-address {
+                        flex: 1;
+                        font-family: monospace;
+                        font-size: 14px;
+                    }
+                    .remove-btn {
+                        background: #e74c3c;
+                        color: white;
+                        border: none;
+                        padding: 5px 10px;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        font-size: 12px;
+                    }
+                    .remove-btn:hover {
+                        background: #c0392b;
+                    }
                     .table-container {
                         overflow-x: auto;
                         padding: 20px;
@@ -419,22 +532,6 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                         position: relative;
                         max-width: 180px;
                     }
-                    .address-cell:hover::after {
-                        content: attr(data-full);
-                        position: absolute;
-                        left: 0;
-                        top: 100%;
-                        background: #2c3e50;
-                        color: white;
-                        padding: 8px;
-                        border-radius: 4px;
-                        white-space: nowrap;
-                        z-index: 1000;
-                        font-size: 0.8em;
-                        max-width: 400px;
-                        overflow: hidden;
-                        text-overflow: ellipsis;
-                    }
                     .copy-btn {
                         background: #3498db;
                         color: white;
@@ -483,6 +580,9 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                         .table-container {
                             padding: 10px;
                         }
+                        .wallet-form {
+                            flex-direction: column;
+                        }
                     }
                 </style>
             </head>
@@ -496,40 +596,79 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
             """
             
             try:
+                # Statistics
+                total_tx = 0
+                unique_wallets = len(VALID_WALLETS)
+                unique_tokens = 0
+                
+                if os.path.exists(CSV_FILE):
+                    with open(CSV_FILE, 'r', encoding='utf-8') as f:
+                        reader = csv.DictReader(f)
+                        rows = list(reader)
+                        total_tx = len(rows)
+                        unique_tokens = len(set(row['mint'] for row in rows if row.get('mint')))
+                
+                html += f"""
+                <div class="stats">
+                    <div class="stat-card">
+                        <div class="stat-number">{total_tx}</div>
+                        <div class="stat-label">Total Transactions</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">{len(VALID_WALLETS)}</div>
+                        <div class="stat-label">Watched Wallets</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">{unique_wallets}</div>
+                        <div class="stat-label">Active Wallets</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">{unique_tokens}</div>
+                        <div class="stat-label">Unique Tokens</div>
+                    </div>
+                </div>
+                """
+                
+                # Wallet Management Section
+                html += """
+                <div class="wallet-management">
+                    <h3>🔧 Wallet Management</h3>
+                    <form class="wallet-form" action="/add-wallet" method="post">
+                        <div class="wallet-input">
+                            <label for="wallet">Add New Wallet:</label>
+                            <input type="text" id="wallet" name="wallet" 
+                                   placeholder="Enter Solana wallet address (44 characters)" 
+                                   required maxlength="44">
+                        </div>
+                        <button type="submit" class="add-btn">➕ Add Wallet</button>
+                    </form>
+                    
+                    <div class="current-wallets">
+                        <h4>Currently Watching ({len(VALID_WALLETS)} wallets):</h4>
+                        <div class="wallet-list">
+                """
+                
+                for wallet in VALID_WALLETS:
+                    html += f"""
+                            <div class="wallet-item">
+                                <span class="wallet-address">{wallet}</span>
+                                <button class="remove-btn" onclick="removeWallet('{wallet}')">🗑️ Remove</button>
+                            </div>
+                    """
+                
+                html += """
+                        </div>
+                    </div>
+                </div>
+                """
+                
+                # Transactions Table
                 if os.path.exists(CSV_FILE):
                     with open(CSV_FILE, 'r', encoding='utf-8') as f:
                         reader = csv.DictReader(f)
                         rows = list(reader)
                         rows.reverse()  # newest first
                     
-                    # Statistics
-                    total_tx = len(rows)
-                    unique_wallets = len(set(row['wallet'] for row in rows if row.get('wallet')))
-                    unique_tokens = len(set(row['mint'] for row in rows if row.get('mint')))
-                    latest_time = rows[0]['timestamp_local'] if rows else 'No transactions'
-                    
-                    html += f"""
-                    <div class="stats">
-                        <div class="stat-card">
-                            <div class="stat-number">{total_tx}</div>
-                            <div class="stat-label">Total Transactions</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-number">{len(VALID_WALLETS)}</div>
-                            <div class="stat-label">Watched Wallets</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-number">{unique_wallets}</div>
-                            <div class="stat-label">Active Wallets</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-number">{unique_tokens}</div>
-                            <div class="stat-label">Unique Tokens</div>
-                        </div>
-                    </div>
-                    """
-                    
-                    # Transactions Table
                     html += """
                     <div class="table-container">
                         <h2 style="color: #2c3e50; margin-bottom: 20px;">Latest Transactions</h2>
@@ -573,18 +712,18 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                         html += f"""
                                 <tr>
                                     <td class="timestamp">{timestamp}</td>
-                                    <td class="address-cell" data-full="{wallet}">
+                                    <td class="address-cell">
                                         {wallet[:10]}...{wallet[-10:] if len(wallet) > 20 else ''}
                                         <button class="copy-btn" onclick="copyToClipboard('{wallet}')">Copy</button>
                                     </td>
                                     <td class="action {action_class}">{row.get('action', '')}</td>
                                     <td class="amount">{amount:,.2f}</td>
-                                    <td class="address-cell" data-full="{mint}">
+                                    <td class="address-cell">
                                         {mint[:10]}...{mint[-10:] if len(mint) > 20 else ''}
                                         <button class="copy-btn" onclick="copyToClipboard('{mint}')">Copy</button>
                                     </td>
                                     <td class="fee">{fee:.6f}</td>
-                                    <td class="address-cell" data-full="{signature}">
+                                    <td class="address-cell">
                                         {signature[:10]}...{signature[-10:] if len(signature) > 20 else ''}
                                         <button class="copy-btn" onclick="copyToClipboard('{signature}')">Copy</button>
                                     </td>
@@ -624,29 +763,49 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                 // Copy to clipboard function
                 function copyToClipboard(text) {
                     navigator.clipboard.writeText(text).then(function() {
-                        // Show subtle notification
-                        const notification = document.createElement('div');
-                        notification.style.cssText = `
-                            position: fixed;
-                            top: 20px;
-                            right: 20px;
-                            background: #27ae60;
-                            color: white;
-                            padding: 10px 20px;
-                            border-radius: 5px;
-                            z-index: 10000;
-                            font-size: 14px;
-                            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-                        `;
-                        notification.textContent = '✓ Copied to clipboard!';
-                        document.body.appendChild(notification);
-                        
-                        setTimeout(() => {
-                            document.body.removeChild(notification);
-                        }, 2000);
+                        showNotification('✓ Copied to clipboard!', 'success');
                     }).catch(function(err) {
                         console.error('Could not copy text: ', err);
+                        showNotification('❌ Copy failed', 'error');
                     });
+                }
+                
+                // Remove wallet function
+                function removeWallet(wallet) {
+                    if (confirm('Are you sure you want to remove this wallet?')) {
+                        fetch('/remove-wallet', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                            },
+                            body: 'wallet=' + encodeURIComponent(wallet)
+                        }).then(response => {
+                            location.reload();
+                        });
+                    }
+                }
+                
+                // Show notification
+                function showNotification(message, type) {
+                    const notification = document.createElement('div');
+                    notification.style.cssText = `
+                        position: fixed;
+                        top: 20px;
+                        right: 20px;
+                        background: ${type === 'success' ? '#27ae60' : '#e74c3c'};
+                        color: white;
+                        padding: 12px 24px;
+                        border-radius: 5px;
+                        z-index: 10000;
+                        font-size: 14px;
+                        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                    `;
+                    notification.textContent = message;
+                    document.body.appendChild(notification);
+                    
+                    setTimeout(() => {
+                        document.body.removeChild(notification);
+                    }, 3000);
                 }
             </script>
             </body>
@@ -656,11 +815,56 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
         else:
             super().do_GET()
 
+    def do_POST(self):
+        """Handle POST requests for wallet management"""
+        if self.path == '/add-wallet':
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length).decode('utf-8')
+            parsed_data = urllib.parse.parse_qs(post_data)
+            wallet = parsed_data.get('wallet', [''])[0].strip()
+            
+            if wallet and validate_wallet_address(wallet):
+                if wallet not in VALID_WALLETS:
+                    VALID_WALLETS.append(wallet)
+                    save_wallets(VALID_WALLETS)
+                    message = f"✅ Wallet {wallet[:8]}... added successfully!"
+                    print(f"➕ Added new wallet: {wallet}")
+                else:
+                    message = f"⚠️ Wallet already exists!"
+            else:
+                message = "❌ Invalid wallet address!"
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html')
+            self.end_headers()
+            self.wfile.write(f'<script>alert("{message}"); window.location="/";</script>'.encode())
+            
+        elif self.path == '/remove-wallet':
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length).decode('utf-8')
+            parsed_data = urllib.parse.parse_qs(post_data)
+            wallet = parsed_data.get('wallet', [''])[0].strip()
+            
+            if wallet in VALID_WALLETS:
+                VALID_WALLETS.remove(wallet)
+                save_wallets(VALID_WALLETS)
+                print(f"🗑️ Removed wallet: {wallet}")
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html')
+            self.end_headers()
+            self.wfile.write(b'<script>window.location="/";</script>')
+        else:
+            super().do_POST()
+
 def start_simple_server():
     """Paleisti web serverį su Render.com PORT"""
     try:
         with socketserver.TCPServer(("", PORT), CSVHandler) as httpd:
             print(f"🌐 Web dashboard started: http://0.0.0.0:{PORT}")
+            print(f"👀 Watching {len(VALID_WALLETS)} wallets:")
+            for wallet in VALID_WALLETS:
+                print(f"   - {wallet}")
             if RENDER:
                 print("🚀 Running on Render.com")
             else:
@@ -712,6 +916,10 @@ def main():
     try:
         while True:
             try:
+                # Perkrauti wallet'us kiekvieną ciklą (jei kas pasikeitė)
+                global VALID_WALLETS
+                VALID_WALLETS = get_valid_wallets()
+                
                 for w in VALID_WALLETS:
                     seen = process_wallet_transactions(w, seen)
                 
@@ -736,7 +944,4 @@ def main():
     except Exception as e:
         print(f"💥 Fatal error: {e}")
         atomic_write_seen(seen)
-        print("✅ Emergency shutdown completed")
-
-if __name__ == "__main__":
-    main()
+        print
