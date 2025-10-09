@@ -402,86 +402,127 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                         font-size: 0.9em;
                     }
                     .wallet-management {
-                        background: #e3f2fd;
-                        padding: 20px;
+                        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+                        padding: 25px;
                         margin: 20px;
-                        border-radius: 10px;
+                        border-radius: 12px;
                         border: 2px solid #2196f3;
+                        box-shadow: 0 4px 12px rgba(33, 150, 243, 0.2);
+                    }
+                    .wallet-management h3 {
+                        color: #1565c0;
+                        margin-bottom: 20px;
+                        font-size: 1.4em;
+                        border-bottom: 2px solid #2196f3;
+                        padding-bottom: 10px;
                     }
                     .wallet-form {
                         display: flex;
-                        gap: 10px;
+                        gap: 15px;
                         align-items: end;
-                        margin-bottom: 15px;
+                        margin-bottom: 20px;
+                        flex-wrap: wrap;
                     }
                     .wallet-input {
                         flex: 1;
+                        min-width: 300px;
                     }
                     .wallet-input label {
                         display: block;
-                        margin-bottom: 5px;
-                        font-weight: bold;
-                        color: #2c3e50;
+                        margin-bottom: 8px;
+                        font-weight: 600;
+                        color: #0d47a1;
+                        font-size: 1.1em;
                     }
                     .wallet-input input {
                         width: 100%;
-                        padding: 12px;
-                        border: 2px solid #bdc3c7;
+                        padding: 14px;
+                        border: 2px solid #90caf9;
                         border-radius: 8px;
                         font-size: 16px;
-                        transition: border-color 0.3s;
+                        font-family: monospace;
+                        background: white;
+                        transition: all 0.3s ease;
                     }
                     .wallet-input input:focus {
-                        border-color: #3498db;
+                        border-color: #2196f3;
                         outline: none;
+                        box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+                        background: #f8fdff;
                     }
                     .add-btn {
-                        padding: 12px 24px;
-                        background: #27ae60;
+                        padding: 14px 28px;
+                        background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
                         color: white;
                         border: none;
                         border-radius: 8px;
                         cursor: pointer;
                         font-size: 16px;
-                        transition: background 0.3s;
+                        font-weight: 600;
+                        transition: all 0.3s ease;
+                        box-shadow: 0 4px 8px rgba(39, 174, 96, 0.3);
                     }
                     .add-btn:hover {
-                        background: #219a52;
+                        background: linear-gradient(135deg, #219a52 0%, #27ae60 100%);
+                        transform: translateY(-2px);
+                        box-shadow: 0 6px 12px rgba(39, 174, 96, 0.4);
                     }
                     .current-wallets {
-                        margin-top: 20px;
+                        margin-top: 25px;
+                    }
+                    .current-wallets h4 {
+                        color: #0d47a1;
+                        margin-bottom: 15px;
+                        font-size: 1.2em;
                     }
                     .wallet-list {
                         display: grid;
-                        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-                        gap: 10px;
-                        margin-top: 10px;
+                        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+                        gap: 12px;
+                        margin-top: 15px;
                     }
                     .wallet-item {
                         background: white;
-                        padding: 10px 15px;
-                        border-radius: 6px;
-                        border: 1px solid #ecf0f1;
+                        padding: 15px;
+                        border-radius: 8px;
+                        border: 1px solid #e3f2fd;
                         display: flex;
                         justify-content: space-between;
                         align-items: center;
+                        transition: all 0.3s ease;
+                        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+                    }
+                    .wallet-item:hover {
+                        transform: translateY(-2px);
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                        border-color: #2196f3;
                     }
                     .wallet-address {
                         flex: 1;
-                        font-family: monospace;
+                        font-family: 'Courier New', monospace;
                         font-size: 14px;
+                        color: #2c3e50;
+                        font-weight: 500;
+                        word-break: break-all;
+                        padding-right: 10px;
                     }
                     .remove-btn {
-                        background: #e74c3c;
+                        background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
                         color: white;
                         border: none;
-                        padding: 5px 10px;
-                        border-radius: 4px;
+                        padding: 8px 16px;
+                        border-radius: 6px;
                         cursor: pointer;
                         font-size: 12px;
+                        font-weight: 600;
+                        transition: all 0.3s ease;
+                        white-space: nowrap;
+                        box-shadow: 0 2px 4px rgba(231, 76, 60, 0.3);
                     }
                     .remove-btn:hover {
-                        background: #c0392b;
+                        background: linear-gradient(135deg, #c0392b 0%, #a93226 100%);
+                        transform: translateY(-1px);
+                        box-shadow: 0 4px 8px rgba(231, 76, 60, 0.4);
                     }
                     .table-container {
                         overflow-x: auto;
@@ -585,8 +626,27 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                         .table-container {
                             padding: 10px;
                         }
+                        .wallet-management {
+                            padding: 20px;
+                            margin: 15px;
+                        }
                         .wallet-form {
                             flex-direction: column;
+                        }
+                        .wallet-input {
+                            min-width: 100%;
+                        }
+                        .wallet-list {
+                            grid-template-columns: 1fr;
+                        }
+                        .wallet-item {
+                            flex-direction: column;
+                            align-items: stretch;
+                            gap: 10px;
+                        }
+                        .wallet-address {
+                            padding-right: 0;
+                            text-align: center;
                         }
                     }
                 </style>
@@ -649,14 +709,14 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                     </form>
                     
                     <div class="current-wallets">
-                        <h4>Currently Watching ({""" + str(len(VALID_WALLETS)) + """} wallets):</h4>
+                        <h4>Currently Watching (<span id="wallet-count">""" + str(len(VALID_WALLETS)) + """</span> wallets):</h4>
                         <div class="wallet-list">
                 """
                 
                 for wallet in VALID_WALLETS:
                     html += f"""
                             <div class="wallet-item">
-                                <span class="wallet-address">{wallet}</span>
+                                <span class="wallet-address" title="{wallet}">{wallet[:12]}...{wallet[-12:]}</span>
                                 <button class="remove-btn" onclick="removeWallet('{wallet}')">🗑️ Remove</button>
                             </div>
                     """
