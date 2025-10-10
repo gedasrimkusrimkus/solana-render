@@ -98,10 +98,11 @@ def get_wallet_activity_stats():
     """Gauti wallet'ų aktyvumo statistiką"""
     stats = {
         'total_transactions': 0,
-        'wallet_activity': {},
+        'wallet_activity': [],
         'recent_transactions': 0,
         'top_tokens': [],
-        'hourly_activity': defaultdict(int)
+        'hourly_activity': defaultdict(int),
+        'unique_wallets': 0
     }
     
     try:
@@ -117,6 +118,7 @@ def get_wallet_activity_stats():
         # Wallet activity counting
         wallet_counts = Counter()
         token_counts = Counter()
+        unique_wallets_set = set()
         
         for row in rows:
             wallet = row.get('wallet', '')
@@ -125,6 +127,7 @@ def get_wallet_activity_stats():
             
             if wallet:
                 wallet_counts[wallet] += 1
+                unique_wallets_set.add(wallet)
                 
             if token:
                 token_counts[token] += 1
@@ -140,6 +143,8 @@ def get_wallet_activity_stats():
                 stats['hourly_activity'][hour_key] += 1
             except:
                 pass
+        
+        stats['unique_wallets'] = len(unique_wallets_set)
         
         # Convert to sorted list
         stats['wallet_activity'] = [
@@ -197,7 +202,7 @@ def generate_hourly_chart(hourly_activity):
     
     return "\n".join(chart_lines)
 
-# ---------------- PATAISYTI FUNKCIJAS ----------------
+# ---------------- PAGYRINDINĖS FUNKCIJOS ----------------
 session = requests.Session()
 
 def validate_config():
@@ -370,7 +375,7 @@ def extract_fee_and_sol_delta(meta, tx_json, wallet):
         return 0.0, 0.0
 
 def process_transaction_for_wallet(signature, wallet):
-    """Apdoroti vieną transakciją - PATAISYTA!"""
+    """Apdoroti vieną transakciją"""
     try:
         tx_json = safe_rpc_call("getTransaction", [signature, {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0}])
         if not tx_json or not validate_transaction_data(tx_json):
@@ -389,7 +394,7 @@ def process_transaction_for_wallet(signature, wallet):
             else:
                 continue  # Skip zero deltas
             
-            # PATAISYTA: Naudoti teisingą blockTime lauką
+            # Naudoti teisingą blockTime lauką
             block_time = tx_json.get("blockTime")
             if block_time:
                 # Konvertuoti blockTime į skaitomą datą
@@ -416,8 +421,27 @@ def process_transaction_for_wallet(signature, wallet):
         print(f"Transaction process error: {e}")
         return []
 
+def is_transaction_already_recorded(signature, mint, action, amount):
+    """Patikrinti ar transakcija jau egzistuoja CSV faile"""
+    try:
+        if not os.path.exists(CSV_FILE):
+            return False
+            
+        with open(CSV_FILE, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if (row.get('signature') == signature and 
+                    row.get('mint') == mint and 
+                    row.get('action') == action and
+                    abs(float(row.get('amount', 0)) - amount) < 1e-6):
+                    return True
+    except Exception as e:
+        print(f"❌ Error checking duplicate: {e}")
+    
+    return False
+
 def process_wallet_transactions(wallet, seen):
-    """Apdoroti visus wallet'o transakcijas - PATAISYTA!"""
+    """Apdoroti visus wallet'o transakcijas"""
     try:
         sigs = safe_rpc_call("getSignaturesForAddress", [wallet, {"limit": SIG_LIMIT}])
         if not sigs:
@@ -432,7 +456,7 @@ def process_wallet_transactions(wallet, seen):
             if not sig:
                 continue
                 
-            # PATIKSLINTA: Tikrinti ar signature jau matytas
+            # Tikrinti ar signature jau matytas
             if sig in seen.get(wallet, set()):
                 continue
             
@@ -441,7 +465,7 @@ def process_wallet_transactions(wallet, seen):
                 continue
                 
             for r in rows:
-                # PAPILDOMAS PATIKRINIMAS: ar transakcija jau egzistuoja CSV faile
+                # Papildomas patikrinimas: ar transakcija jau egzistuoja CSV faile
                 if not is_transaction_already_recorded(r['signature'], r['mint'], r['action'], r['amount']):
                     simple_csv_row(r)
                     mint_short = r['mint'][:8] + '...' if len(r['mint']) > 8 else r['mint']
@@ -468,31 +492,8 @@ def process_wallet_transactions(wallet, seen):
         print(f"Wallet process error: {e}")
     return seen
 
-def is_transaction_already_recorded(signature, mint, action, amount):
-    """Patikrinti ar transakcija jau egzistuoja CSV faile - NAUJA FUNKCIJA!"""
-    try:
-        if not os.path.exists(CSV_FILE):
-            return False
-            
-        with open(CSV_FILE, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                if (row.get('signature') == signature and 
-                    row.get('mint') == mint and 
-                    row.get('action') == action and
-                    abs(float(row.get('amount', 0)) - amount) < 1e-6):
-                    return True
-    except Exception as e:
-        print(f"❌ Error checking duplicate: {e}")
-    
-    return False
-
-# ---------------- LIKĘS KODAS BE PAKEITIMŲ ----------------
-# (CSVHandler klasė ir main() funkcija lieka tokios pačios)
-# ... [CSVHandler klasė ir main() funkcija lieka nepakitusios] ...
-
+# ---------------- WEB DASHBOARD SU PATAISYTU DIZAINU ----------------
 class CSVHandler(http.server.SimpleHTTPRequestHandler):
-    # ... [visas HTML kodas lieka toks pat] ...
     def do_GET(self):
         if self.path == '/':
             self.send_response(200)
@@ -510,7 +511,371 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
                 <style>
-                    /* ... [CSS styles remain the same] ... */
+                    * {
+                        margin: 0;
+                        padding: 0;
+                        box-sizing: border-box;
+                    }
+                    body { 
+                        font-family: 'Segoe UI', Arial, sans-serif; 
+                        margin: 0; 
+                        padding: 20px; 
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        min-height: 100vh;
+                    }
+                    .container {
+                        max-width: 1400px;
+                        margin: 0 auto;
+                        background: white;
+                        border-radius: 15px;
+                        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+                        overflow: hidden;
+                    }
+                    .header {
+                        background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+                        color: white;
+                        padding: 30px;
+                        text-align: center;
+                    }
+                    .header h1 {
+                        margin: 0;
+                        font-size: 2.5em;
+                        font-weight: 300;
+                    }
+                    .stats {
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                        gap: 20px;
+                        padding: 20px;
+                        background: #f8f9fa;
+                    }
+                    .stat-card {
+                        background: white;
+                        padding: 20px;
+                        border-radius: 10px;
+                        text-align: center;
+                        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                        transition: transform 0.3s ease;
+                    }
+                    .stat-card:hover {
+                        transform: translateY(-5px);
+                    }
+                    .stat-number {
+                        font-size: 2em;
+                        font-weight: bold;
+                        color: #2c3e50;
+                    }
+                    .stat-label {
+                        color: #7f8c8d;
+                        font-size: 0.9em;
+                        margin-top: 5px;
+                    }
+                    .analytics-section {
+                        display: grid;
+                        grid-template-columns: 1fr 1fr;
+                        gap: 20px;
+                        padding: 20px;
+                        background: #f8f9fa;
+                    }
+                    @media (max-width: 768px) {
+                        .analytics-section {
+                            grid-template-columns: 1fr;
+                        }
+                    }
+                    .chart-container {
+                        background: white;
+                        padding: 20px;
+                        border-radius: 10px;
+                        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                    }
+                    .chart-title {
+                        color: #2c3e50;
+                        margin-bottom: 15px;
+                        font-size: 1.2em;
+                        font-weight: 600;
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                    }
+                    .wallet-bar {
+                        display: flex;
+                        align-items: center;
+                        margin-bottom: 10px;
+                        padding: 8px;
+                        background: #f8f9fa;
+                        border-radius: 5px;
+                        transition: background 0.3s ease;
+                    }
+                    .wallet-bar:hover {
+                        background: #e9ecef;
+                    }
+                    .wallet-name {
+                        width: 120px;
+                        font-family: monospace;
+                        font-size: 0.85em;
+                        color: #2c3e50;
+                    }
+                    .bar-container {
+                        flex: 1;
+                        background: #e9ecef;
+                        border-radius: 3px;
+                        overflow: hidden;
+                        margin: 0 10px;
+                    }
+                    .bar-fill {
+                        height: 20px;
+                        background: linear-gradient(90deg, #3498db, #2980b9);
+                        border-radius: 3px;
+                        transition: width 0.3s ease;
+                    }
+                    .bar-count {
+                        width: 40px;
+                        text-align: right;
+                        font-weight: bold;
+                        color: #2c3e50;
+                    }
+                    .hourly-chart {
+                        display: flex;
+                        align-items: end;
+                        height: 120px;
+                        gap: 5px;
+                        margin-top: 10px;
+                    }
+                    .hour-bar {
+                        flex: 1;
+                        background: linear-gradient(to top, #27ae60, #2ecc71);
+                        border-radius: 3px 3px 0 0;
+                        position: relative;
+                        min-height: 5px;
+                        transition: height 0.3s ease;
+                    }
+                    .hour-bar:hover {
+                        opacity: 0.8;
+                    }
+                    .hour-label {
+                        position: absolute;
+                        bottom: -20px;
+                        left: 0;
+                        right: 0;
+                        text-align: center;
+                        font-size: 0.7em;
+                        color: #7f8c8d;
+                    }
+                    .wallet-management {
+                        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+                        padding: 25px;
+                        margin: 20px;
+                        border-radius: 12px;
+                        border: 2px solid #2196f3;
+                        box-shadow: 0 4px 12px rgba(33, 150, 243, 0.2);
+                    }
+                    .wallet-management h3 {
+                        color: #1565c0;
+                        margin-bottom: 20px;
+                        font-size: 1.4em;
+                        border-bottom: 2px solid #2196f3;
+                        padding-bottom: 10px;
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                    }
+                    .wallet-form {
+                        display: flex;
+                        gap: 15px;
+                        align-items: end;
+                        margin-bottom: 20px;
+                        flex-wrap: wrap;
+                    }
+                    .wallet-input {
+                        flex: 1;
+                        min-width: 300px;
+                    }
+                    .wallet-input label {
+                        display: block;
+                        margin-bottom: 8px;
+                        font-weight: 600;
+                        color: #0d47a1;
+                        font-size: 1.1em;
+                    }
+                    .wallet-input input {
+                        width: 100%;
+                        padding: 14px;
+                        border: 2px solid #90caf9;
+                        border-radius: 8px;
+                        font-size: 16px;
+                        font-family: monospace;
+                        background: white;
+                        transition: all 0.3s ease;
+                    }
+                    .wallet-input input:focus {
+                        border-color: #2196f3;
+                        outline: none;
+                        box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+                        background: #f8fdff;
+                    }
+                    .add-btn {
+                        padding: 14px 28px;
+                        background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+                        color: white;
+                        border: none;
+                        border-radius: 8px;
+                        cursor: pointer;
+                        font-size: 16px;
+                        font-weight: 600;
+                        transition: all 0.3s ease;
+                        box-shadow: 0 4px 8px rgba(39, 174, 96, 0.3);
+                    }
+                    .add-btn:hover {
+                        background: linear-gradient(135deg, #219a52 0%, #27ae60 100%);
+                        transform: translateY(-2px);
+                        box-shadow: 0 6px 12px rgba(39, 174, 96, 0.4);
+                    }
+                    .current-wallets {
+                        margin-top: 25px;
+                    }
+                    .current-wallets h4 {
+                        color: #0d47a1;
+                        margin-bottom: 15px;
+                        font-size: 1.2em;
+                    }
+                    .wallet-list {
+                        display: grid;
+                        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+                        gap: 12px;
+                        margin-top: 15px;
+                    }
+                    .wallet-item {
+                        background: white;
+                        padding: 15px;
+                        border-radius: 8px;
+                        border: 1px solid #e3f2fd;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        transition: all 0.3s ease;
+                        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+                    }
+                    .wallet-item:hover {
+                        transform: translateY(-2px);
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                        border-color: #2196f3;
+                    }
+                    .wallet-address {
+                        flex: 1;
+                        font-family: 'Courier New', monospace;
+                        font-size: 14px;
+                        color: #2c3e50;
+                        font-weight: 500;
+                        word-break: break-all;
+                        padding-right: 10px;
+                    }
+                    .remove-btn {
+                        background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+                        color: white;
+                        border: none;
+                        padding: 8px 16px;
+                        border-radius: 6px;
+                        cursor: pointer;
+                        font-size: 12px;
+                        font-weight: 600;
+                        transition: all 0.3s ease;
+                        white-space: nowrap;
+                        box-shadow: 0 2px 4px rgba(231, 76, 60, 0.3);
+                    }
+                    .remove-btn:hover {
+                        background: linear-gradient(135deg, #c0392b 0%, #a93226 100%);
+                        transform: translateY(-1px);
+                        box-shadow: 0 4px 8px rgba(231, 76, 60, 0.4);
+                    }
+                    .table-container {
+                        overflow-x: auto;
+                        padding: 20px;
+                    }
+                    table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin: 20px 0;
+                        font-size: 0.85em;
+                        min-width: 1200px;
+                    }
+                    th {
+                        background: #34495e;
+                        color: white;
+                        padding: 12px 8px;
+                        text-align: left;
+                        font-weight: 600;
+                        position: sticky;
+                        top: 0;
+                    }
+                    td {
+                        padding: 10px 8px;
+                        border-bottom: 1px solid #ecf0f1;
+                        max-width: 200px;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        white-space: nowrap;
+                    }
+                    tr:hover {
+                        background: #f8f9fa;
+                    }
+                    .buy { 
+                        color: #27ae60; 
+                        font-weight: bold;
+                    }
+                    .sell { 
+                        color: #e74c3c; 
+                        font-weight: bold;
+                    }
+                    .transfer {
+                        color: #95a5a6;
+                    }
+                    .refresh-info {
+                        text-align: center;
+                        padding: 10px;
+                        background: #ecf0f1;
+                        color: #7f8c8d;
+                        font-size: 0.9em;
+                    }
+                    .address-cell {
+                        cursor: pointer;
+                        position: relative;
+                        max-width: 180px;
+                    }
+                    .copy-btn {
+                        background: #3498db;
+                        color: white;
+                        border: none;
+                        padding: 3px 8px;
+                        border-radius: 3px;
+                        cursor: pointer;
+                        font-size: 0.75em;
+                        margin-left: 5px;
+                        transition: background 0.2s;
+                    }
+                    .copy-btn:hover {
+                        background: #2980b9;
+                    }
+                    .timestamp {
+                        min-width: 140px;
+                    }
+                    .action {
+                        min-width: 70px;
+                        text-align: center;
+                    }
+                    .amount {
+                        min-width: 100px;
+                        text-align: right;
+                    }
+                    .fee {
+                        min-width: 90px;
+                        text-align: right;
+                    }
+                    .no-data {
+                        text-align: center;
+                        color: #7f8c8d;
+                        padding: 40px;
+                        font-style: italic;
+                    }
                 </style>
             </head>
             <body>
@@ -522,7 +887,7 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
             """
             
             try:
-                # Statistics
+                # Statistics - PATAISYTA LOGIKA
                 html += f"""
                 <div class="stats">
                     <div class="stat-card">
@@ -534,7 +899,7 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                         <div class="stat-label">Watched Wallets</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-number">{len(stats['wallet_activity'])}</div>
+                        <div class="stat-number">{stats['unique_wallets']}</div>
                         <div class="stat-label">Active Wallets</div>
                     </div>
                     <div class="stat-card">
@@ -552,7 +917,7 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                 """
                 
                 if stats['wallet_activity']:
-                    max_activity = max([wa['count'] for wa in stats['wallet_activity']])
+                    max_activity = max([wa['count'] for wa in stats['wallet_activity']]) if stats['wallet_activity'] else 1
                     for wa in stats['wallet_activity'][:6]:
                         percentage = (wa['count'] / max_activity * 100) if max_activity > 0 else 0
                         html += f"""
@@ -565,7 +930,7 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                         </div>
                         """
                 else:
-                    html += "<p style='color: #7f8c8d; text-align: center;'>No activity data yet</p>"
+                    html += '<div class="no-data">No wallet activity data yet</div>'
                 
                 html += """
                     </div>
@@ -581,14 +946,14 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                     
                     for hour in sorted_hours:
                         count = stats['hourly_activity'][hour]
-                        height = (count / max_hourly * 100) if max_hourly > 0 else 5
+                        height = (count / max_hourly * 80) + 5 if max_hourly > 0 else 5  # 5-85% height
                         html += f"""
                             <div class="hour-bar" style="height: {height}%" title="{hour}: {count} transactions">
                                 <div class="hour-label">{hour.split(':')[0]}</div>
                             </div>
                         """
                 else:
-                    html += "<p style='color: #7f8c8d; text-align: center;'>No hourly data yet</p>"
+                    html += '<div class="no-data">No hourly data yet</div>'
                 
                 html += """
                         </div>
@@ -605,7 +970,7 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                             <label for="wallet">Add New Wallet:</label>
                             <input type="text" id="wallet" name="wallet" 
                                    placeholder="Enter Solana wallet address (44 characters)" 
-                                   required maxlength="44">
+                                   required maxlength="44" pattern="[A-Za-z0-9]{{44}}">
                         </div>
                         <button type="submit" class="add-btn">➕ Add Wallet</button>
                     </form>
@@ -634,6 +999,7 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                     with open(CSV_FILE, 'r', encoding='utf-8') as f:
                         reader = csv.DictReader(f)
                         rows = list(reader)
+                        # Reverse to show newest first
                         rows.reverse()
                     
                     html += """
@@ -654,46 +1020,64 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                             <tbody>
                     """
                     
-                    for row in rows[:50]:
+                    # Show only unique transactions (remove duplicates)
+                    seen_transactions = set()
+                    unique_rows = []
+                    
+                    for row in rows[:50]:  # Limit to 50 rows
                         if not all(key in row for key in ['wallet', 'mint', 'signature']):
                             continue
                             
-                        action_class = {
-                            'BUY': 'buy',
-                            'SELL': 'sell', 
-                            'TRANSFER': 'transfer'
-                        }.get(row.get('action', ''), '')
-                        
-                        try:
-                            amount = float(row.get('amount', 0))
-                            fee = float(row.get('fee_sol', 0))
-                        except (ValueError, TypeError):
-                            amount = 0
-                            fee = 0
-                        
-                        wallet = row.get('wallet', '')
-                        mint = row.get('mint', '')
-                        signature = row.get('signature', '')
-                        timestamp = row.get('timestamp_local', '')
-                        
-                        html += f"""
+                        # Create unique identifier for transaction
+                        tx_id = f"{row.get('signature', '')}-{row.get('mint', '')}-{row.get('action', '')}"
+                        if tx_id not in seen_transactions:
+                            seen_transactions.add(tx_id)
+                            unique_rows.append(row)
+                    
+                    if unique_rows:
+                        for row in unique_rows:
+                            action_class = {
+                                'BUY': 'buy',
+                                'SELL': 'sell', 
+                                'TRANSFER': 'transfer'
+                            }.get(row.get('action', ''), '')
+                            
+                            try:
+                                amount = float(row.get('amount', 0))
+                                fee = float(row.get('fee_sol', 0))
+                            except (ValueError, TypeError):
+                                amount = 0
+                                fee = 0
+                            
+                            wallet = row.get('wallet', '')
+                            mint = row.get('mint', '')
+                            signature = row.get('signature', '')
+                            timestamp = row.get('timestamp_local', '')
+                            
+                            html += f"""
+                                    <tr>
+                                        <td class="timestamp">{timestamp}</td>
+                                        <td class="address-cell">
+                                            {wallet[:10]}...{wallet[-10:] if len(wallet) > 20 else ''}
+                                            <button class="copy-btn" onclick="copyToClipboard('{wallet}')">Copy</button>
+                                        </td>
+                                        <td class="action {action_class}">{row.get('action', '')}</td>
+                                        <td class="amount">{amount:,.2f}</td>
+                                        <td class="address-cell">
+                                            {mint[:10]}...{mint[-10:] if len(mint) > 20 else ''}
+                                            <button class="copy-btn" onclick="copyToClipboard('{mint}')">Copy</button>
+                                        </td>
+                                        <td class="fee">{fee:.6f}</td>
+                                        <td class="address-cell">
+                                            {signature[:10]}...{signature[-10:] if len(signature) > 20 else ''}
+                                            <button class="copy-btn" onclick="copyToClipboard('{signature}')">Copy</button>
+                                        </td>
+                                    </tr>
+                            """
+                    else:
+                        html += """
                                 <tr>
-                                    <td class="timestamp">{timestamp}</td>
-                                    <td class="address-cell">
-                                        {wallet[:10]}...{wallet[-10:] if len(wallet) > 20 else ''}
-                                        <button class="copy-btn" onclick="copyToClipboard('{wallet}')">Copy</button>
-                                    </td>
-                                    <td class="action {action_class}">{row.get('action', '')}</td>
-                                    <td class="amount">{amount:,.2f}</td>
-                                    <td class="address-cell">
-                                        {mint[:10]}...{mint[-10:] if len(mint) > 20 else ''}
-                                        <button class="copy-btn" onclick="copyToClipboard('{mint}')">Copy</button>
-                                    </td>
-                                    <td class="fee">{fee:.6f}</td>
-                                    <td class="address-cell">
-                                        {signature[:10]}...{signature[-10:] if len(signature) > 20 else ''}
-                                        <button class="copy-btn" onclick="copyToClipboard('{signature}')">Copy</button>
-                                    </td>
+                                    <td colspan="7" class="no-data">No transactions recorded yet</td>
                                 </tr>
                         """
                     
@@ -774,6 +1158,16 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                         document.body.removeChild(notification);
                     }, 3000);
                 }
+                
+                // Add input validation
+                document.addEventListener('DOMContentLoaded', function() {
+                    const walletInput = document.getElementById('wallet');
+                    if (walletInput) {
+                        walletInput.addEventListener('input', function() {
+                            this.value = this.value.toUpperCase();
+                        });
+                    }
+                });
             </script>
             </body>
             </html>
