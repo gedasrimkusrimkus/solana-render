@@ -91,7 +91,7 @@ def get_valid_wallets():
 # INICIJUOTI VALID_WALLETS kaip global kintamąjį
 VALID_WALLETS = get_valid_wallets()
 
-# ---------------- PAGRINDINĖ LOGIKA ----------------
+# ---------------- LIKĘS KODAS BE PAKEITIMŲ ----------------
 session = requests.Session()
 
 def validate_config():
@@ -344,7 +344,7 @@ def process_wallet_transactions(wallet, seen):
         print(f"Wallet process error: {e}")
     return seen
 
-# ---------------- WEB DASHBOARD SU GRAŽIU DIZAINU ----------------
+# ---------------- WEB DASHBOARD SU WALLET PRIDĖJIMU ----------------
 class CSVHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path == '/':
@@ -420,15 +420,19 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                         margin: 20px;
                         border-radius: 10px;
                         border: 2px solid #2196f3;
+                        max-width: 100%;
+                        overflow: hidden;
                     }
                     .wallet-form {
                         display: flex;
                         gap: 10px;
                         align-items: end;
                         margin-bottom: 15px;
+                        flex-wrap: wrap;
                     }
                     .wallet-input {
                         flex: 1;
+                        min-width: 300px;
                     }
                     .wallet-input label {
                         display: block;
@@ -443,6 +447,7 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                         border-radius: 8px;
                         font-size: 16px;
                         transition: border-color 0.3s;
+                        font-family: monospace;
                     }
                     .wallet-input input:focus {
                         border-color: #3498db;
@@ -457,6 +462,7 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                         cursor: pointer;
                         font-size: 16px;
                         transition: background 0.3s;
+                        white-space: nowrap;
                     }
                     .add-btn:hover {
                         background: #219a52;
@@ -466,32 +472,44 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                     }
                     .wallet-list {
                         display: grid;
-                        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-                        gap: 10px;
+                        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+                        gap: 12px;
                         margin-top: 10px;
                     }
                     .wallet-item {
                         background: white;
-                        padding: 10px 15px;
-                        border-radius: 6px;
+                        padding: 12px 15px;
+                        border-radius: 8px;
                         border: 1px solid #ecf0f1;
                         display: flex;
                         justify-content: space-between;
                         align-items: center;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                        transition: transform 0.2s;
+                    }
+                    .wallet-item:hover {
+                        transform: translateY(-2px);
+                        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
                     }
                     .wallet-address {
                         flex: 1;
-                        font-family: monospace;
-                        font-size: 14px;
+                        font-family: 'Courier New', monospace;
+                        font-size: 13px;
+                        word-break: break-all;
+                        color: #2c3e50;
+                        font-weight: 500;
                     }
                     .remove-btn {
                         background: #e74c3c;
                         color: white;
                         border: none;
-                        padding: 5px 10px;
-                        border-radius: 4px;
+                        padding: 6px 12px;
+                        border-radius: 5px;
                         cursor: pointer;
                         font-size: 12px;
+                        margin-left: 10px;
+                        white-space: nowrap;
+                        transition: background 0.3s;
                     }
                     .remove-btn:hover {
                         background: #c0392b;
@@ -598,8 +616,34 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                         .table-container {
                             padding: 10px;
                         }
+                        .wallet-management {
+                            margin: 10px;
+                            padding: 15px;
+                        }
                         .wallet-form {
                             flex-direction: column;
+                        }
+                        .wallet-input {
+                            min-width: 100%;
+                        }
+                        .wallet-list {
+                            grid-template-columns: 1fr;
+                        }
+                        .wallet-item {
+                            flex-direction: column;
+                            align-items: flex-start;
+                            gap: 10px;
+                        }
+                        .remove-btn {
+                            align-self: flex-end;
+                        }
+                    }
+                    @media (max-width: 480px) {
+                        .wallet-address {
+                            font-size: 12px;
+                        }
+                        .wallet-list {
+                            grid-template-columns: 1fr;
                         }
                     }
                 </style>
@@ -656,14 +700,15 @@ class CSVHandler(http.server.SimpleHTTPRequestHandler):
                             <label for="wallet">Add New Wallet:</label>
                             <input type="text" id="wallet" name="wallet" 
                                    placeholder="Enter Solana wallet address (44 characters)" 
-                                   required maxlength="44">
+                                   required maxlength="44" pattern="[A-Za-z0-9]{44}"
+                                   title="Solana wallet address must be exactly 44 characters">
                         </div>
                         <button type="submit" class="add-btn">➕ Add Wallet</button>
                     </form>
                     
                     <div class="current-wallets">
-                        <h4>Currently Watching ({""" + str(len(VALID_WALLETS)) + """} wallets):</h4>
-                        <div class="wallet-list">
+                        <h4>Currently Watching (<span id="wallet-count">""" + str(len(VALID_WALLETS)) + """</span> wallets):</h4>
+                        <div class="wallet-list" id="wallet-list">
                 """
                 
                 for wallet in VALID_WALLETS:
