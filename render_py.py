@@ -18,7 +18,9 @@ RENDER = os.environ.get('RENDER', False)
 RPC_ENDPOINTS = [
     "https://rpc.ankr.com/solana",
     "https://api.mainnet-beta.solana.com", 
-    "https://solana-rpc.publicnode.com"
+    "https://solana-rpc.publicnode.com",
+    "https://solana-mainnet.rpc.extrnode.com",  # Pridėkite šį - labai greitas
+    "https://sharp-smart-wind.solana-mainnet.quiknode.pro/"
 ]
 
 # Wallet'ų failas
