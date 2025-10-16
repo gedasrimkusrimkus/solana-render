@@ -18,9 +18,7 @@ RENDER = os.environ.get('RENDER', False)
 RPC_ENDPOINTS = [
     "https://rpc.ankr.com/solana",
     "https://api.mainnet-beta.solana.com", 
-    "https://solana-rpc.publicnode.com",
-    "https://solana-mainnet.rpc.extrnode.com",  # Pridėkite šį - labai greitas
-    "https://sharp-smart-wind.solana-mainnet.quiknode.pro/"
+    "https://solana-rpc.publicnode.com"
 ]
 
 # Wallet'ų failas
@@ -208,15 +206,28 @@ def simple_csv_row(row):
         print(f"❌ CSV write error: {e}")
 
 def notify_user(title, message):
-    """Pranešti vartotojui"""
-    if HAS_PLYER:
-        try:
-            from plyer import notification
-            notification.notify(title=title, message=message, timeout=6)
-        except Exception:
-            print(f"NOTIFY: {title} - {message}")
-    else:
-        print(f"NOTIFY: {title} - {message}")
+    """Pranešti vartotojui su garso signalu"""
+    print(f"NOTIFY: {title} - {message}")
+    
+    # Garso pranešimas
+    try:
+        import winsound
+        
+        if "BUY" in title.upper():
+            # Trumpas optimistiškas garsas pirkimui
+            winsound.PlaySound("SystemExclamation", winsound.SND_ALIAS)
+            print("🔔 BUY sound played!")
+        elif "SELL" in title.upper():
+            # Ilgesnis garsas pardavimui
+            winsound.PlaySound("SystemHand", winsound.SND_ALIAS)
+            print("🔔 SELL sound played!")
+        else:
+            # Standartinis garsas
+            winsound.PlaySound("SystemAsterisk", winsound.SND_ALIAS)
+            print("🔔 Transaction sound played!")
+            
+    except Exception as e:
+        print(f"🔇 Sound not available: {e}")
 
 def validate_transaction_data(tx_json):
     """Validuoti transakcijos duomenis"""
